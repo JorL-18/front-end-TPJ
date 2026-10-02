@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<title>KinTrack — Devices</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=block" rel="stylesheet">
+<script>
+tailwind.config = { theme:{ extend:{
+  colors:{ bg:"#F6F8FA", panel:"#FFFFFF", "panel-2":"#F1F5F7", border:"#E3E8EC", ink:"#0F2A2E", muted:"#64748B", green:"#059669", amber:"#D97706", red:"#DC2626" },
+  fontFamily:{ body:["Inter"], mono:["JetBrains Mono"] }, spacing:{ "sidebar":"240px", "header":"56px" }
+}}};
+</script>
+<style>
+  html,body{ background:#F6F8FA; color:#0F2A2E; font-family:Inter,sans-serif; }
+  .mono{ font-family:'JetBrains Mono',monospace; }
+  .panel{ background:#FFFFFF; border:1px solid #E3E8EC; }
+  .lab{ font-size:11px; letter-spacing:.06em; font-weight:700; text-transform:uppercase; }
+  .navlink{ display:flex; align-items:center; gap:12px; padding:11px 16px; color:#64748B; cursor:pointer; transition:.15s; border-left:2px solid transparent; text-decoration:none; }
+  .navlink:hover{ color:#0F2A2E; background:rgba(5,150,105,.05); }
+  .navlink.active{ color:#059669; border-left-color:#059669; background:rgba(5,150,105,.08); font-weight:600; }
+  .navlink.inert{ opacity:.55; cursor:default; } .navlink.inert:hover{ color:#64748B; background:transparent; }
+  .material-symbols-outlined{ font-size:20px; }
+  ::-webkit-scrollbar{ width:8px; } ::-webkit-scrollbar-thumb{ background:#E3E8EC; border-radius:4px; }
+  .pulse{ position:relative; }
+  .pulse::after{ content:""; position:absolute; inset:-4px; border-radius:50%; border:2px solid currentColor; opacity:.5; animation:pulse 1.8s ease-out infinite; }
+  @keyframes pulse{ from{ transform:scale(.6); opacity:.7; } to{ transform:scale(1.6); opacity:0; } }
+  .dev-card{ transition:.15s; border-top:3px solid var(--c); }
+  .dev-card:hover{ box-shadow:0 2px 12px rgba(15,42,46,.07); }
+</style>
+</head>
+<body class="flex h-screen overflow-hidden">
+
+<!-- SIDEBAR -->
+<nav id="sidebar" class="fixed left-0 top-0 h-full w-sidebar panel border-r flex flex-col z-[1000] -translate-x-full md:translate-x-0 transition-transform duration-200">
+  <a href="index.html" class="px-4 py-4 border-b border-border flex items-center gap-3">
+    <div class="w-9 h-9 rounded-lg bg-green/10 border border-green/30 flex items-center justify-center">
+      <span class="material-symbols-outlined text-green" style="font-variation-settings:'FILL' 1;">family_home</span></div>
+    <div><h1 class="text-[19px] font-bold text-green leading-none">KinTrack</h1><p class="text-[12px] text-muted mt-1">Family Locator</p></div>
+  </a>
+  <div class="flex-1 py-2">
+    <a href="index.html" class="navlink"><span class="material-symbols-outlined">map</span>Live Map</a>
+    <a href="devices.html" class="navlink active"><span class="material-symbols-outlined" style="font-variation-settings:'FILL' 1;">share_location</span>Devices</a>
+    <div class="navlink inert"><span class="material-symbols-outlined">history</span>Location History</div>
+    <div class="navlink inert"><span class="material-symbols-outlined">shield</span>Safe Zones</div>
+    <div class="navlink inert"><span class="material-symbols-outlined">notifications_active</span>Alerts</div>
+  </div>
+  <div class="border-t border-border py-2">
+    <div class="navlink inert"><span class="material-symbols-outlined">settings</span>Settings</div>
+    <div class="navlink inert"><span class="material-symbols-outlined">help</span>Support</div>
+  </div>
+</nav>
+
+<!-- MAIN -->
+<div id="backdrop" onclick="closeSidebar()" class="fixed inset-0 bg-black/30 z-[990] hidden"></div>
+<div class="flex-1 md:ml-sidebar flex flex-col h-screen min-w-0">
+  <header class="h-header panel border-b flex justify-between items-center px-4 shrink-0">
+    <div class="flex items-center gap-2">
+      <button onclick="openSidebar()" class="md:hidden text-muted hover:text-green"><span class="material-symbols-outlined">menu</span></button>
+      <div class="flex items-center gap-2 bg-bg border border-border rounded-lg px-3 py-1.5 w-44 sm:w-72">
+        <span class="material-symbols-outlined text-muted" style="font-size:18px;">search</span>
+        <input id="search" class="bg-transparent border-none outline-none text-ink text-[13px] w-full placeholder:text-muted p-0 focus:ring-0" placeholder="Find a tag…">
+      </div>
+    </div>
+    <div class="flex items-center gap-3 sm:gap-5 text-muted">
+      <span class="relative material-symbols-outlined cursor-pointer hover:text-green">notifications<span id="bellDot" class="hidden absolute top-0 right-0 w-2 h-2 rounded-full bg-red"></span></span>
+      <span class="material-symbols-outlined cursor-pointer hover:text-green">account_circle</span>
+      <span class="hidden sm:inline-block text-[13px] border-l border-border pl-5">Parent account · <span class="text-ink">Demo Family</span></span>
+    </div>
+  </header>
+
+  <div class="flex-1 overflow-y-auto p-4 sm:p-6">
+    <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between mb-6">
+      <div>
+        <div class="text-[12px] text-muted">DEVICES › All tags</div>
+        <div class="flex items-center flex-wrap gap-3 mt-1">
+          <h2 class="text-[26px] font-semibold text-ink">GPS Tags</h2>
+          <span class="lab text-muted border border-border rounded px-2 py-1">4 paired</span>
+          <span class="flex items-center gap-1.5 text-[12px] text-green"><span class="w-2 h-2 rounded-full bg-green pulse text-green"></span>Live</span>
+        </div>
+      </div>
+      <div class="flex items-center gap-3">
+        <button class="flex items-center gap-2 text-[14px] text-white font-semibold bg-green rounded-lg px-4 py-2 opacity-60 cursor-not-allowed" title="Not available in demo"><span class="material-symbols-outlined" style="font-size:18px;">add</span>Pair New Tag</button>
+      </div>
+    </div>
+
+    <div id="devCards" class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-6"></div>
+
+    <div class="panel rounded-xl overflow-hidden">
+      <div class="px-5 py-3 border-b border-border flex items-center justify-between">
+        <h3 class="text-[16px] font-semibold flex items-center gap-2"><span class="material-symbols-outlined text-green">table_rows</span>Tag Registry</h3>
+        <span class="lab text-muted">Live</span>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-[13px]">
+          <thead class="bg-panel-2 text-muted"><tr class="text-left">
+            <th class="lab px-5 py-2.5">Tag</th><th class="lab px-5 py-2.5">Assigned</th><th class="lab px-5 py-2.5">Attached to</th>
+            <th class="lab px-5 py-2.5">Location</th><th class="lab px-5 py-2.5">Coordinates</th><th class="lab px-5 py-2.5 text-right">Battery</th><th class="lab px-5 py-2.5 text-right">Last fix</th>
+          </tr></thead>
+          <tbody id="rows" class="divide-y divide-border"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <p class="text-[12px] text-muted mt-6 text-center">Demo build — tag positions are simulated.</p>
+  </div>
+</div>
+
+<script src="tracker.js"></script>
+<script>
+function matches(d){ const q=$("search").value.trim().toLowerCase(); return !q || (d.name+d.owner+d.attached+d.id).toLowerCase().includes(q); }
+
+function renderCards(){
+  const list = DEVICES.filter(matches);
+  $("devCards").innerHTML = list.map(d => {
+    const s=statusOf(d), al=alertsFor(d), near=nearestZone(d.pos);
+    return `
+    <div class="dev-card panel rounded-xl p-5" style="--c:${d.color}">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-lg flex items-center justify-center mono text-[13px] font-bold" style="background:${d.color}1a;color:${d.color}">${d.id.slice(-2)}</div>
+          <div><div class="font-semibold text-[15px]">${d.name} · ${d.owner}</div><div class="text-[12px] text-muted">${d.attached}</div></div>
+        </div>
+        <span class="lab text-muted">${d.id}</span>
+      </div>
+      <div class="mt-4 flex items-center justify-between">
+        <span class="text-[12px] font-semibold rounded-full px-2.5 py-1 ${s.cls}">${s.label}</span>
+        <span class="mono text-[13px] flex items-center gap-1 ${d.battery<20?"text-red":"text-muted"}"><span class="material-symbols-outlined" style="font-size:17px;">${batteryIcon(d.battery)}</span>${Math.round(d.battery)}%</span>
+      </div>
+      <div class="mt-3 grid grid-cols-2 gap-2 text-[12px]">
+        <div class="bg-panel-2 rounded-lg px-3 py-2"><div class="lab text-muted !text-[10px]">Speed</div><div class="mono font-semibold mt-0.5">${d.speedKmh.toFixed(1)} km/h</div></div>
+        <div class="bg-panel-2 rounded-lg px-3 py-2"><div class="lab text-muted !text-[10px]">Last fix</div><div class="mono font-semibold mt-0.5">${fmtTime(d.lastSeen)}</div></div>
+        <div class="bg-panel-2 rounded-lg px-3 py-2 col-span-2"><div class="lab text-muted !text-[10px]">Nearest zone</div><div class="font-semibold mt-0.5">${near.z.name} <span class="mono text-muted font-normal">· ${Math.round(near.m)} m</span></div></div>
+      </div>
+      ${al.length?`<div class="mt-3 text-[12px] text-red flex items-center gap-1.5"><span class="material-symbols-outlined" style="font-size:16px;">error</span>${al.join(" · ")}</div>`:""}
+      <a href="index.html#${d.id}" class="mt-4 flex items-center justify-center gap-1.5 text-[13px] border border-border rounded-lg py-2 hover:border-green hover:text-green transition"><span class="material-symbols-outlined" style="font-size:17px;">map</span>View on map</a>
+    </div>`;
+  }).join("") || `<div class="text-[13px] text-muted">No tags match your search.</div>`;
+
+  $("rows").innerHTML = list.map(d => `
+    <tr class="hover:bg-panel-2">
+      <td class="px-5 py-3"><span class="inline-flex items-center gap-2 font-semibold"><span class="w-2.5 h-2.5 rounded-full" style="background:${d.color}"></span>${d.id}</span></td>
+      <td class="px-5 py-3">${d.owner}</td>
+      <td class="px-5 py-3 text-muted">${d.attached}</td>
+      <td class="px-5 py-3"><span class="text-[12px] font-semibold rounded-full px-2.5 py-1 ${statusOf(d).cls}">${statusOf(d).label}</span></td>
+      <td class="px-5 py-3 mono text-muted">${d.pos[0].toFixed(5)}, ${d.pos[1].toFixed(5)}</td>
+      <td class="px-5 py-3 mono text-right ${d.battery<20?"text-red":""}">${Math.round(d.battery)}%</td>
+      <td class="px-5 py-3 mono text-right text-muted">${fmtTime(d.lastSeen)}</td>
+    </tr>`).join("");
+
+  $("bellDot").classList.toggle("hidden", !DEVICES.some(d=>alertsFor(d).length));
+}
+
+$("search").oninput = renderCards;
+renderCards();
+setInterval(() => { stepAll(() => {}); renderCards(); }, 2000);
+</script>
+</body>
+</html>
