@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<title>KinTrack — Live Map</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=block" rel="stylesheet">
+<script>
+tailwind.config = { theme:{ extend:{
+  colors:{ bg:"#F6F8FA", panel:"#FFFFFF", "panel-2":"#F1F5F7", border:"#E3E8EC", ink:"#0F2A2E", muted:"#64748B", green:"#059669", amber:"#D97706", red:"#DC2626" },
+  fontFamily:{ body:["Inter"], mono:["JetBrains Mono"] }, spacing:{ "sidebar":"240px", "header":"56px" }
+}}};
+</script>
+<style>
+  html,body{ background:#F6F8FA; color:#0F2A2E; font-family:Inter,sans-serif; }
+  .mono{ font-family:'JetBrains Mono',monospace; }
+  .panel{ background:#FFFFFF; border:1px solid #E3E8EC; }
+  .lab{ font-size:11px; letter-spacing:.06em; font-weight:700; text-transform:uppercase; }
+  .navlink{ display:flex; align-items:center; gap:12px; padding:11px 16px; color:#64748B; cursor:pointer; transition:.15s; border-left:2px solid transparent; text-decoration:none; }
+  .navlink:hover{ color:#0F2A2E; background:rgba(5,150,105,.05); }
+  .navlink.active{ color:#059669; border-left-color:#059669; background:rgba(5,150,105,.08); font-weight:600; }
+  .navlink.inert{ opacity:.55; cursor:default; } .navlink.inert:hover{ color:#64748B; background:transparent; }
+  .material-symbols-outlined{ font-size:20px; }
+  ::-webkit-scrollbar{ width:8px; } ::-webkit-scrollbar-thumb{ background:#E3E8EC; border-radius:4px; }
+  .dev-card{ cursor:pointer; transition:.15s; }
+  .dev-card:hover{ border-color:#cbd5dc; box-shadow:0 2px 10px rgba(15,42,46,.06); }
+  .dev-card.selected{ border-color:var(--c); box-shadow:0 0 0 3px color-mix(in srgb, var(--c) 18%, transparent); }
+  .pulse{ position:relative; }
+  .pulse::after{ content:""; position:absolute; inset:-4px; border-radius:50%; border:2px solid currentColor; opacity:.5; animation:pulse 1.8s ease-out infinite; }
+  @keyframes pulse{ from{ transform:scale(.6); opacity:.7; } to{ transform:scale(1.6); opacity:0; } }
+  .leaflet-container{ font-family:Inter,sans-serif; background:#eef2f4; }
+  .pin{ width:34px; height:34px; border-radius:50%; border:3px solid #fff; box-shadow:0 2px 8px rgba(0,0,0,.25); display:flex; align-items:center; justify-content:center; color:#fff; }
+  .pin .material-symbols-outlined{ font-size:18px; font-variation-settings:'FILL' 1; }
+  .leaflet-popup-content{ margin:10px 14px; font-size:13px; }
+</style>
+</head>
+<body class="flex h-screen overflow-hidden">
+
+<!-- SIDEBAR -->
+<nav id="sidebar" class="fixed left-0 top-0 h-full w-sidebar panel border-r flex flex-col z-[1000] -translate-x-full md:translate-x-0 transition-transform duration-200">
+  <a href="index.html" class="px-4 py-4 border-b border-border flex items-center gap-3">
+    <div class="w-9 h-9 rounded-lg bg-green/10 border border-green/30 flex items-center justify-center">
+      <span class="material-symbols-outlined text-green" style="font-variation-settings:'FILL' 1;">family_home</span></div>
+    <div><h1 class="text-[19px] font-bold text-green leading-none">KinTrack</h1><p class="text-[12px] text-muted mt-1">Family Locator</p></div>
+  </a>
+  <div class="flex-1 py-2">
+    <a href="index.html" class="navlink active"><span class="material-symbols-outlined" style="font-variation-settings:'FILL' 1;">map</span>Live Map</a>
+    <div class="navlink inert"><span class="material-symbols-outlined">devices</span>Devices</div>
+    <div class="navlink inert"><span class="material-symbols-outlined">history</span>Location History</div>
+    <div class="navlink inert"><span class="material-symbols-outlined">shield</span>Safe Zones</div>
+    <div class="navlink inert"><span class="material-symbols-outlined">notifications_active</span>Alerts</div>
+  </div>
+  <div class="border-t border-border py-2">
+    <div class="navlink inert"><span class="material-symbols-outlined">settings</span>Settings</div>
+    <div class="navlink inert"><span class="material-symbols-outlined">help</span>Support</div>
+  </div>
+</nav>
+
+<!-- MAIN -->
+<div id="backdrop" onclick="closeSidebar()" class="fixed inset-0 bg-black/30 z-[990] hidden"></div>
+<div class="flex-1 md:ml-sidebar flex flex-col h-screen min-w-0">
+  <header class="h-header panel border-b flex justify-between items-center px-4 shrink-0">
+    <div class="flex items-center gap-2">
+      <button onclick="openSidebar()" class="md:hidden text-muted hover:text-green"><span class="material-symbols-outlined">menu</span></button>
+      <div class="flex items-center gap-2 bg-bg border border-border rounded-lg px-3 py-1.5 w-44 sm:w-72">
+        <span class="material-symbols-outlined text-muted" style="font-size:18px;">search</span>
+        <input id="search" class="bg-transparent border-none outline-none text-ink text-[13px] w-full placeholder:text-muted p-0 focus:ring-0" placeholder="Search devices…">
+      </div>
+    </div>
+    <div class="flex items-center gap-3 sm:gap-5 text-muted">
+      <span class="relative material-symbols-outlined cursor-pointer hover:text-green">notifications<span id="bellDot" class="hidden absolute top-0 right-0 w-2 h-2 rounded-full bg-red"></span></span>
+      <span class="material-symbols-outlined cursor-pointer hover:text-green">account_circle</span>
+      <span class="hidden sm:inline-block text-[13px] border-l border-border pl-5">Parent account · <span class="text-ink">Demo Family</span></span>
+    </div>
+  </header>
+
+  <div class="flex-1 overflow-y-auto p-4 sm:p-6">
+    <!-- title row -->
+    <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between mb-6">
+      <div>
+        <div class="text-[12px] text-muted">LIVE MAP › <span id="crumb">All devices</span></div>
+        <div class="flex items-center flex-wrap gap-3 mt-1">
+          <h2 class="text-[26px] font-semibold text-ink">Family Overview</h2>
+          <span class="lab text-muted border border-border rounded px-2 py-1">Demo · Simulated GPS</span>
+          <span class="flex items-center gap-1.5 text-[12px] text-green"><span class="w-2 h-2 rounded-full bg-green pulse text-green"></span>Live</span>
+        </div>
+      </div>
+      <div class="flex items-center gap-3">
+        <button onclick="showAll()" class="flex items-center gap-2 text-[14px] text-ink border border-border bg-panel rounded-lg px-4 py-2 hover:border-green hover:text-green transition"><span class="material-symbols-outlined" style="font-size:18px;">zoom_out_map</span>Show All</button>
+        <button onclick="pingSelected()" class="flex items-center gap-2 text-[14px] text-white font-semibold bg-green rounded-lg px-4 py-2 hover:bg-green/90 transition"><span class="material-symbols-outlined" style="font-size:18px;">my_location</span>Locate Now</button>
+      </div>
+    </div>
+
+    <!-- KPI row -->
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+      <div class="panel rounded-xl p-5">
+        <div class="flex items-center justify-between"><span class="lab text-ink flex items-center gap-2"><span class="material-symbols-outlined text-green" style="font-size:18px;">wifi_tethering</span>Online</span><span class="lab text-muted hidden sm:inline">DEV_STATUS</span></div>
+        <div class="mono text-[26px] font-semibold text-green mt-3"><span id="kOnline">4</span><span class="text-[14px] text-muted"> / 4</span></div>
+        <div class="text-[13px] text-muted mt-1">devices reporting</div>
+      </div>
+      <div class="panel rounded-xl p-5">
+        <div class="flex items-center justify-between"><span class="lab text-ink flex items-center gap-2"><span class="material-symbols-outlined text-green" style="font-size:18px;">verified_user</span>In Safe Zones</span><span class="lab text-muted hidden sm:inline">GEO_FENCE</span></div>
+        <div class="mono text-[26px] font-semibold text-green mt-3"><span id="kSafe">–</span><span class="text-[14px] text-muted"> / 4</span></div>
+        <div class="text-[13px] text-muted mt-1">home, school or park</div>
+      </div>
+      <div class="panel rounded-xl p-5">
+        <div class="flex items-center justify-between"><span class="lab text-ink flex items-center gap-2"><span class="material-symbols-outlined text-amber" style="font-size:18px;">warning</span>Active Alerts</span><span class="lab text-muted hidden sm:inline">ALERTS</span></div>
+        <div class="mono text-[26px] font-semibold mt-3" id="kAlerts">0</div>
+        <div class="text-[13px] text-muted mt-1">outside zone / low battery</div>
+      </div>
+      <div class="panel rounded-xl p-5">
+        <div class="flex items-center justify-between"><span class="lab text-ink flex items-center gap-2"><span class="material-symbols-outlined text-green" style="font-size:18px;">update</span>Last Sync</span><span class="lab text-muted hidden sm:inline">GPS_FIX</span></div>
+        <div class="mono text-[26px] font-semibold text-ink mt-3" id="kSync">--:--:--</div>
+        <div class="text-[13px] text-muted mt-1">updates every 2 seconds</div>
+      </div>
+    </div>
+
+    <!-- device cards -->
+    <div id="devCards" class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-6"></div>
+
+    <!-- map + side panel -->
+    <div class="grid grid-cols-1 xl:grid-cols-3 gap-4 mb-6">
+      <div class="panel rounded-xl overflow-hidden xl:col-span-2 flex flex-col">
+        <div class="flex items-center justify-between px-5 py-3 border-b border-border">
+          <h3 class="text-[16px] font-semibold flex items-center gap-2"><span class="material-symbols-outlined text-green">travel_explore</span>Live Locations</h3>
+          <div class="flex items-center gap-4 text-[12px] text-muted">
+            <label class="flex items-center gap-1.5 cursor-pointer"><input id="tTrails" type="checkbox" checked class="rounded text-green focus:ring-green">Trails</label>
+            <label class="flex items-center gap-1.5 cursor-pointer"><input id="tZones" type="checkbox" checked class="rounded text-green focus:ring-green">Safe zones</label>
+          </div>
+        </div>
+        <div id="map" class="h-[420px] md:h-[520px] w-full"></div>
+      </div>
+
+      <div class="panel rounded-xl flex flex-col max-h-[580px]">
+        <div class="px-5 py-3 border-b border-border flex items-center justify-between">
+          <h3 class="text-[16px] font-semibold flex items-center gap-2"><span class="material-symbols-outlined text-green">timeline</span>Activity</h3>
+          <span class="lab text-muted">Today</span>
+        </div>
+        <ul id="feed" class="flex-1 overflow-y-auto divide-y divide-border"></ul>
+      </div>
+    </div>
+
+    <!-- detail + chart -->
+    <div class="grid grid-cols-1 xl:grid-cols-3 gap-4">
+      <div class="panel rounded-xl p-5">
+        <h3 class="text-[16px] font-semibold flex items-center gap-2 mb-4"><span class="material-symbols-outlined text-green">info</span>Device Details</h3>
+        <div id="detail" class="text-[13px]"></div>
+      </div>
+      <div class="panel rounded-xl p-5 xl:col-span-2">
+        <div class="flex items-center justify-between mb-4">
+          <h3 class="text-[16px] font-semibold flex items-center gap-2"><span class="material-symbols-outlined text-green">bar_chart</span>Distance Travelled Today</h3>
+          <span class="lab text-muted">KM / HOUR</span>
+        </div>
+        <div class="h-[260px]"><canvas id="chart"></canvas></div>
+      </div>
+    </div>
+
+    <p class="text-[12px] text-muted mt-6 text-center">Demo build — device positions are simulated. Map data © OpenStreetMap contributors, © CARTO.</p>
+  </div>
+</div>
+
+<script>
+/* ---------- demo data ---------- */
+const ZONES = [
+  { id:"home",   name:"Home",               icon:"home",   center:[43.6680,-79.3990], r:140 },
+  { id:"school", name:"Palmerston School",  icon:"school", center:[43.6712,-79.4120], r:170 },
+  { id:"park",   name:"Christie Pits Park", icon:"park",   center:[43.6646,-79.4205], r:180 },
+];
+
+const DEVICES = [
+  { id:"D-01", name:"Emma's Phone",  owner:"Emma, 14", type:"Smartphone", icon:"smartphone", color:"#2563EB", battery:82, speed:0.0016,
+    route:[[43.6680,-79.3990],[43.6688,-79.4030],[43.6697,-79.4070],[43.6706,-79.4105],[43.6712,-79.4120]] },
+  { id:"D-02", name:"Liam's Watch",  owner:"Liam, 9",  type:"Smartwatch", icon:"watch", color:"#059669", battery:41, speed:0.0022,
+    route:[[43.6712,-79.4120],[43.6700,-79.4140],[43.6683,-79.4165],[43.6668,-79.4185],[43.6646,-79.4205],[43.6625,-79.4235],[43.6608,-79.4262]] },
+  { id:"D-03", name:"Backpack Tag",  owner:"Liam's bag", type:"GPS Tag", icon:"backpack", color:"#D97706", battery:17, speed:0.0002,
+    route:[[43.6711,-79.4118],[43.6714,-79.4123],[43.6710,-79.4125]] },
+  { id:"D-04", name:"Family Car",    owner:"Shared",   type:"Vehicle Tracker", icon:"directions_car", color:"#7C3AED", battery:100, speed:0.0045,
+    route:[[43.6680,-79.3990],[43.6672,-79.3950],[43.6660,-79.3900],[43.6640,-79.3870],[43.6600,-79.3860],[43.6565,-79.3830],[43.6544,-79.3807]] },
+];
+
+/* ---------- helpers ---------- */
+const $ = id => document.getElementById(id);
+const fmtTime = d => d.toLocaleTimeString([], { hour:"2-digit", minute:"2-digit", second:"2-digit" });
+function haversine(a, b){
+  const R=6371000, toR=x=>x*Math.PI/180;
+  const dLat=toR(b[0]-a[0]), dLng=toR(b[1]-a[1]);
+  const h=Math.sin(dLat/2)**2+Math.cos(toR(a[0]))*Math.cos(toR(b[0]))*Math.sin(dLng/2)**2;
+  return 2*R*Math.asin(Math.sqrt(h));
+}
+function zoneOf(pos){ return ZONES.find(z => haversine(pos, z.center) <= z.r) || null; }
+function routeLen(r){ let s=0; for(let i=1;i<r.length;i++) s+=haversine(r[i-1],r[i]); return s; }
+function pointAt(route, f){ // f in [0,1] along the route
+  const total=routeLen(route); let target=f*total;
+  for(let i=1;i<route.length;i++){
+    const seg=haversine(route[i-1],route[i]);
+    if(target<=seg){ const t=seg?target/seg:0; return [route[i-1][0]+(route[i][0]-route[i-1][0])*t, route[i-1][1]+(route[i][1]-route[i-1][1])*t]; }
+    target-=seg;
+  }
+  return route[route.length-1];
+}
+
+/* ---------- state ---------- */
+let selected = null;
+const feed = [];
+DEVICES.forEach((d,i) => {
+  d.t = [0.05, 0.1, 0.3, 0.0][i]; d.dir = 1;
+  d.pos = pointAt(d.route, d.t); d.prev = d.pos;
+  d.zone = zoneOf(d.pos); d.trail = [d.pos]; d.speedKmh = 0; d.lastSeen = new Date();
+});
+
+/* ---------- map ---------- */
+const map = L.map("map", { zoomControl:true, attributionControl:true }).setView([43.666,-79.405], 14);
+L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
+  maxZoom:19, subdomains:"abcd",
+  attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/">CARTO</a>'
+}).addTo(map);
+
+const zoneLayer = L.layerGroup(ZONES.map(z => L.circle(z.center, { radius:z.r, color:"#059669", weight:1.5, fillColor:"#059669", fillOpacity:.08, dashArray:"4 4" })
+  .bindTooltip(z.name, { permanent:true, direction:"center", className:"!bg-white/80 !border-0 !shadow-none !text-[11px] !font-semibold !text-green" }))).addTo(map);
+const trailLayer = L.layerGroup().addTo(map);
+
+DEVICES.forEach(d => {
+  d.marker = L.marker(d.pos, { icon:L.divIcon({ className:"", iconSize:[34,34], iconAnchor:[17,17],
+    html:`<div class="pin" style="background:${d.color}"><span class="material-symbols-outlined">${d.icon}</span></div>` }) })
+    .addTo(map).on("click", () => select(d.id));
+  d.trailLine = L.polyline(d.trail, { color:d.color, weight:3, opacity:.6 }).addTo(trailLayer);
+});
+
+$("tTrails").onchange = e => e.target.checked ? map.addLayer(trailLayer) : map.removeLayer(trailLayer);
+$("tZones").onchange  = e => e.target.checked ? map.addLayer(zoneLayer)  : map.removeLayer(zoneLayer);
+
+function showAll(){ select(null); map.fitBounds(L.latLngBounds(DEVICES.map(d=>d.pos)).pad(0.25)); }
+
+/* ---------- alerts & feed ---------- */
+function alertsFor(d){
+  const a=[];
+  if(!d.zone && d.type!=="Vehicle Tracker") a.push("Outside safe zone");
+  if(d.battery<20) a.push("Low battery");
+  return a;
+}
+function log(d, text, kind="info"){
+  feed.unshift({ d, text, kind, time:new Date() });
+  if(feed.length>40) feed.pop();
+  renderFeed();
+}
+function renderFeed(){
+  const color = { info:"text-muted", enter:"text-green", leave:"text-amber", warn:"text-red" };
+  const icon  = { info:"radio_button_checked", enter:"login", leave:"logout", warn:"warning" };
+  $("feed").innerHTML = feed.map(e => `
+    <li class="px-5 py-3 flex gap-3 items-start hover:bg-panel-2 cursor-pointer" onclick="select('${e.d.id}')">
+      <span class="material-symbols-outlined ${color[e.kind]} mt-0.5" style="font-size:18px;">${icon[e.kind]}</span>
+      <div class="flex-1 min-w-0">
+        <div class="text-[13px]"><span class="font-semibold" style="color:${e.d.color}">${e.d.name}</span> ${e.text}</div>
+        <div class="mono text-[11px] text-muted mt-0.5">${fmtTime(e.time)}</div>
+      </div>
+    </li>`).join("") || `<li class="px-5 py-6 text-[13px] text-muted">No activity yet.</li>`;
+}
+
+/* ---------- rendering ---------- */
+function statusOf(d){
+  if(d.zone) return { label:`At ${d.zone.name}`, cls:"text-green bg-green/10" };
+  if(d.speedKmh>1) return { label:"In transit", cls:"text-amber bg-amber/10" };
+  return { label:"Stopped", cls:"text-muted bg-panel-2" };
+}
+function batteryIcon(b){ return b>80?"battery_full":b>50?"battery_5_bar":b>20?"battery_3_bar":"battery_1_bar"; }
+
+function renderCards(){
+  const q = $("search").value.trim().toLowerCase();
+  $("devCards").innerHTML = DEVICES.filter(d => !q || (d.name+d.owner+d.type+d.id).toLowerCase().includes(q)).map(d => {
+    const s=statusOf(d), al=alertsFor(d);
+    return `
+    <div class="dev-card panel rounded-xl p-5 ${selected===d.id?"selected":""}" style="--c:${d.color}" onclick="select('${d.id}')">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-lg flex items-center justify-center" style="background:${d.color}1a;color:${d.color}">
+            <span class="material-symbols-outlined" style="font-variation-settings:'FILL' 1;">${d.icon}</span></div>
+          <div><div class="font-semibold text-[15px]">${d.name}</div><div class="text-[12px] text-muted">${d.owner} · ${d.type}</div></div>
+        </div>
+        <span class="lab text-muted">${d.id}</span>
+      </div>
+      <div class="mt-4 flex items-center justify-between">
+        <span class="text-[12px] font-semibold rounded-full px-2.5 py-1 ${s.cls}">${s.label}</span>
+        <span class="mono text-[13px] flex items-center gap-1 ${d.battery<20?"text-red":"text-muted"}"><span class="material-symbols-outlined" style="font-size:17px;">${batteryIcon(d.battery)}</span>${Math.round(d.battery)}%</span>
+      </div>
+      <div class="mt-3 grid grid-cols-2 gap-2 text-[12px]">
+        <div class="bg-panel-2 rounded-lg px-3 py-2"><div class="lab text-muted !text-[10px]">Speed</div><div class="mono font-semibold mt-0.5">${d.speedKmh.toFixed(1)} km/h</div></div>
+        <div class="bg-panel-2 rounded-lg px-3 py-2"><div class="lab text-muted !text-[10px]">Last fix</div><div class="mono font-semibold mt-0.5">${fmtTime(d.lastSeen)}</div></div>
+      </div>
+      ${al.length?`<div class="mt-3 text-[12px] text-red flex items-center gap-1.5"><span class="material-symbols-outlined" style="font-size:16px;">error</span>${al.join(" · ")}</div>`:""}
+    </div>`;
+  }).join("") || `<div class="text-[13px] text-muted">No devices match “${q}”.</div>`;
+}
+
+function renderKpis(){
+  $("kSafe").textContent = DEVICES.filter(d=>d.zone).length;
+  const n = DEVICES.reduce((s,d)=>s+alertsFor(d).length,0);
+  $("kAlerts").textContent = n;
+  $("kAlerts").className = "mono text-[26px] font-semibold mt-3 " + (n? "text-red" : "text-green");
+  $("bellDot").classList.toggle("hidden", !n);
+  $("kSync").textContent = fmtTime(new Date());
+}
+
+function renderDetail(){
+  const d = DEVICES.find(x=>x.id===selected);
+  $("crumb").textContent = d ? d.name : "All devices";
+  if(!d){ $("detail").innerHTML = `<div class="text-muted">Select a device on the map or in the cards above to see its details.</div>`; return; }
+  const nearest = ZONES.map(z=>({z, m:haversine(d.pos,z.center)})).sort((a,b)=>a.m-b.m)[0];
+  const rows = [
+    ["Device", `${d.name} <span class="text-muted">(${d.id})</span>`],
+    ["Assigned to", d.owner],
+    ["Status", statusOf(d).label],
+    ["Coordinates", `<span class="mono">${d.pos[0].toFixed(5)}, ${d.pos[1].toFixed(5)}</span>`],
+    ["Nearest zone", `${nearest.z.name} · <span class="mono">${Math.round(nearest.m)} m</span>`],
+    ["Speed", `<span class="mono">${d.speedKmh.toFixed(1)} km/h</span>`],
+    ["Battery", `<span class="mono">${Math.round(d.battery)}%</span>`],
+    ["GPS accuracy", `<span class="mono">±${d.type==="GPS Tag"?12:5} m</span>`],
+  ];
+  $("detail").innerHTML = rows.map(([k,v])=>`<div class="flex justify-between gap-4 py-2 border-b border-border last:border-0"><span class="text-muted">${k}</span><span class="text-right">${v}</span></div>`).join("");
+}
+
+function render(){ renderCards(); renderKpis(); renderDetail(); }
+
+function select(id){
+  selected = id;
+  if(id){ const d = DEVICES.find(x=>x.id===id); map.flyTo(d.pos, 16, { duration:.6 }); }
+  closeSidebar(); render();
+}
+function pingSelected(){
+  const list = selected ? DEVICES.filter(d=>d.id===selected) : DEVICES;
+  list.forEach(d => { d.lastSeen = new Date(); log(d, "location refreshed on request"); });
+  if(!selected) showAll(); render();
+}
+$("search").oninput = renderCards;
+
+/* ---------- simulation tick ---------- */
+function tick(){
+  DEVICES.forEach(d => {
+    d.t += d.speed * d.dir * (0.6 + Math.random()*0.8);
+    if(d.t>=1){ d.t=1; d.dir=-1; } if(d.t<=0){ d.t=0; d.dir=1; }
+    d.prev = d.pos;
+    d.pos = pointAt(d.route, d.t);
+    d.speedKmh = haversine(d.prev, d.pos) / 2 * 3.6; // metres per 2 s → km/h
+    d.lastSeen = new Date();
+    d.battery = Math.max(3, d.battery - (d.type==="Vehicle Tracker"?0:0.03));
+    d.marker.setLatLng(d.pos);
+    d.trail.push(d.pos); if(d.trail.length>120) d.trail.shift();
+    d.trailLine.setLatLngs(d.trail);
+
+    const z = zoneOf(d.pos);
+    if(z?.id !== d.zone?.id){
+      if(d.zone) log(d, `left ${d.zone.name}`, "leave");
+      if(z) log(d, `arrived at ${z.name}`, "enter");
+      else if(d.type!=="Vehicle Tracker") log(d, "is outside all safe zones", "warn");
+      d.zone = z;
+    }
+    if(d.battery<20 && !d.lowBatLogged){ d.lowBatLogged = true; log(d, `battery low (${Math.round(d.battery)}%)`, "warn"); }
+  });
+  render();
+}
+
+/* ---------- chart ---------- */
+const hours = Array.from({length:12},(_,i)=>`${(7+i)%24}:00`);
+const seed = [[0.4,1.8,0.2,0.1,0.1,0.3,0.1,0.2,1.9,0.6,0.3,0.2],[0.2,1.7,0.1,0.1,0.4,0.2,0.1,0.3,2.4,1.1,0.4,0.1],[0.2,1.7,0,0,0,0,0,0,1.6,0,0,0],[3.1,6.2,0.4,0,2.5,4.8,0.9,1.2,7.4,5.1,2.2,0.6]];
+new Chart($("chart"), {
+  type:"bar",
+  data:{ labels:hours, datasets: DEVICES.map((d,i)=>({ label:d.name, data:seed[i], backgroundColor:d.color, borderRadius:3, maxBarThickness:18 })) },
+  options:{ responsive:true, maintainAspectRatio:false,
+    plugins:{ legend:{ position:"bottom", labels:{ color:"#64748B", boxWidth:10, boxHeight:10, font:{ family:"Inter", size:12 } } } },
+    scales:{ x:{ stacked:true, grid:{ display:false }, ticks:{ color:"#64748B", font:{ family:"JetBrains Mono", size:11 } } },
+             y:{ stacked:true, grid:{ color:"#EEF2F5" }, ticks:{ color:"#64748B", font:{ family:"JetBrains Mono", size:11 } } } } }
+});
+
+/* ---------- sidebar (mobile) ---------- */
+function openSidebar(){ $("sidebar").classList.remove("-translate-x-full"); $("backdrop").classList.remove("hidden"); }
+function closeSidebar(){ if(window.innerWidth<768){ $("sidebar").classList.add("-translate-x-full"); $("backdrop").classList.add("hidden"); } }
+
+/* ---------- boot ---------- */
+DEVICES.forEach(d => log(d, d.zone ? `checked in at ${d.zone.name}` : "came online"));
+render(); showAll();
+setInterval(tick, 2000);
+</script>
+</body>
+</html>
